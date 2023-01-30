@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from .calculate import calculate, CalculationError
 from pydantic import BaseModel
 
@@ -17,70 +17,90 @@ calculator = FastAPI()
 @calculator.post("/calculations", status_code=201)
 def add_calculation(calc: Calculation, request: Request):
 
-    storage = Storage()
-    client_ip = request.client.host
-    expression = calc.expression
+    try:
+        storage = Storage()
+        client_ip = request.client.host
+        expression = calc.expression
 
-    result = _get_calc_result(expression)
+        result = _get_calc_result(expression)
 
-    client_index = _find_client_or_create_new(client_ip, storage.calculations)
-    calculation_id = _add_calculation_to_clients_record_and_set_id(client_index, expression, result, storage.calculations)
+        client_index = _find_client_or_create_new(client_ip, storage.calculations)
+        calculation_id = _add_calculation_to_clients_record_and_set_id(client_index,
+                                                                       expression,
+                                                                       result,
+                                                                       storage.calculations)
 
-    return {"url": f'/calculations/{calculation_id}'}
+        return {"url": f'/calculations/{calculation_id}'}
+
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                            detail=str(e),
+                            headers={"X-Error": "Unexpected error."})
 
 
 @calculator.get("/calculations", status_code=302)
 def get_all_calculations(request: Request):
 
-    storage = Storage()
-    client_ip = request.client.host
     try:
-        client_index = storage.calculations[0].index(client_ip)
+        storage = Storage()
+        client_ip = request.client.host
+        try:
+            client_index = storage.calculations[0].index(client_ip)
 
-    except ValueError:
+        except ValueError:
 
-        request.code = 302
-        request.message = "No records were found."
-        request.json_out = ''
+            raise HTTPException(status_code=404,
+                                detail="No records were found.",
+                                headers={"X-Error": "No records were found."})
 
-        return
+        calculations = storage.calculations[1][client_index]
 
-    calculations = storage.calculations[1][client_index]
+        return _pack_calculations(calculations)
 
-    return _pack_calculations(calculations)
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                            detail=str(e),
+                            headers={"X-Error": "Unexpected error."})
 
 
 @calculator.get("/calculations/{calc_id}", status_code=302)
 def get_calculation_by_id(calc_id: int, request: Request):
 
-    storage = Storage()
-    id = calc_id
-    client_ip = request.client.host
-
     try:
-        client_index = storage.calculations[0].index(client_ip)
+        storage = Storage()
+        client_ip = request.client.host
+        calculation_id = calc_id - 1
 
-    except ValueError:
+        try:
+            client_index = storage.calculations[0].index(client_ip)
 
-        request.code = 404
-        request.message = "No records were found."
-        request.json_out = ''
+        except ValueError:
 
-        return
+            raise HTTPException(status_code=404,
+                                detail="Record not found.",
+                                headers={"X-Error": "Record not found."})
 
-    calculation_id = id - 1
-    try:
-        calculations = [storage.calculations[1][client_index][calculation_id]]
+        try:
+            calculations = [storage.calculations[1][client_index][calculation_id]]
 
-    except IndexError:
+        except IndexError:
 
-        request.code = 404
-        request.message = f"Record with id: {request.calculation_id} does not exist."
-        request.json_out = ''
+            raise HTTPException(status_code=404,
+                                detail=f"Record with id: {calc_id} was not found.",
+                                headers={"X-Error": f"Record with id: {calc_id} was not found."})
 
-        return
+        return _pack_calculations(calculations)
 
-    return _pack_calculations(calculations)
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                            detail=str(e),
+                            headers={"X-Error": "Unexpected error."})
 
 
 def _find_client_or_create_new(client_ip, calculations):
