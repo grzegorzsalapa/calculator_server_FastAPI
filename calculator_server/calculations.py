@@ -1,115 +1,106 @@
+from fastapi import FastAPI, Request
 from .calculate import calculate, CalculationError
-import re
-import json
-from json import JSONDecodeError
+from pydantic import BaseModel
 
 
-class Calculations:
+class Calculation(BaseModel):
+    expression: str
 
-    def __init__(self):
-        self.calculations = [[], []]
 
-    def add_calculation(self, request):
+class Calculations(BaseModel):
+    id: str
 
-        if request.json_in == '':
 
-            request.code = 400
-            request.message = "Request missing json file."
-            request.json_out = ''
+calculator = FastAPI()
 
-            return
 
-        try:
-            expression = _unpack_json(request.json_in)
+@calculator.post("/calculations", status_code=201)
+def add_calculation(calc: Calculation, request: Request):
 
-        except (JSONDecodeError, KeyError) as e:
+    storage = Storage()
+    client_ip = request.client.host
+    expression = calc.expression
 
-            request.code = 400
-            request.message = "Invalid format of JSON file."
-            request.json_out = ''
+    result = _get_calc_result(expression)
 
-            return
+    client_index = _find_client_or_create_new(client_ip, storage.calculations)
+    calculation_id = _add_calculation_to_clients_record_and_set_id(client_index, expression, result, storage.calculations)
 
-        result = _get_calc_result(expression)
+    return {"url": f'/calculations/{calculation_id}'}
 
-        client_index = self._find_client_or_create_new(request)
-        calculation_id = self._add_calculation_to_clients_record_and_set_id(client_index, expression, result)
 
-        request.code = 201
-        request.message = f"Calculation added to record with id:{calculation_id}."
-        request.json_out = _pack_in_json({"url": f'/calculations/{calculation_id}'})
+@calculator.get("/calculations", status_code=302)
+def get_all_calculations(request: Request):
 
-    def get_all_calculations(self, request):
+    storage = Storage()
+    client_ip = request.client.host
+    try:
+        client_index = storage.calculations[0].index(client_ip)
 
-        client_ip, client_port = request.client_address
-        try:
-            client_index = self.calculations[0].index(client_ip)
-
-        except ValueError:
-
-            request.code = 302
-            request.message = "No records were found."
-            request.json_out = ''
-
-            return
-
-        calculations = self.calculations[1][client_index]
-        payload = _pack_calculations(calculations)
+    except ValueError:
 
         request.code = 302
-        request.message = "Returned requested calculations."
-        request.json_out = _pack_in_json(payload)
+        request.message = "No records were found."
+        request.json_out = ''
 
-    def get_calculation_by_id(self, request):
+        return
 
-        client_ip, client_port = request.client_address
-        try:
-            client_index = self.calculations[0].index(client_ip)
+    calculations = storage.calculations[1][client_index]
 
-        except ValueError:
+    return _pack_calculations(calculations)
 
-            request.code = 404
-            request.message = "No records were found."
-            request.json_out = ''
 
-            return
+@calculator.get("/calculations/{calc_id}", status_code=302)
+def get_calculation_by_id(calc_id: int, request: Request):
 
-        calculation_id = int(request.calculation_id) - 1
-        try:
-            calculations = [self.calculations[1][client_index][calculation_id]]
+    storage = Storage()
+    id = calc_id
+    client_ip = request.client.host
 
-        except IndexError:
+    try:
+        client_index = storage.calculations[0].index(client_ip)
 
-            request.code = 404
-            request.message = f"Record with id: {request.calculation_id} does not exist."
-            request.json_out = ''
+    except ValueError:
 
-            return
+        request.code = 404
+        request.message = "No records were found."
+        request.json_out = ''
 
-        payload = _pack_calculations(calculations)
+        return
 
-        request.code = 302
-        request.message = "Returned requested calculation."
-        request.json_out = _pack_in_json(payload)
+    calculation_id = id - 1
+    try:
+        calculations = [storage.calculations[1][client_index][calculation_id]]
 
-    def _find_client_or_create_new(self, request):
+    except IndexError:
 
-        client_ip, client_port = request.client_address
-        try:
-            client_index = self.calculations[0].index(client_ip)
-        except ValueError:
-            client_index = len(self.calculations[0])
-            self.calculations[0].append(client_ip)
-            self.calculations[1].append([])
+        request.code = 404
+        request.message = f"Record with id: {request.calculation_id} does not exist."
+        request.json_out = ''
 
-        return client_index
+        return
 
-    def _add_calculation_to_clients_record_and_set_id(self, client_index, expression, result):
+    return _pack_calculations(calculations)
 
-        calculation_id = len(self.calculations[1][client_index]) + 1
-        self.calculations[1][client_index].append((calculation_id, expression, result))
 
-        return calculation_id
+def _find_client_or_create_new(client_ip, calculations):
+
+    try:
+        client_index = calculations[0].index(client_ip)
+    except ValueError:
+        client_index = len(calculations[0])
+        calculations[0].append(client_ip)
+        calculations[1].append([])
+
+    return client_index
+
+
+def _add_calculation_to_clients_record_and_set_id(client_index, expression, result, calculations):
+
+    calculation_id = len(calculations[1][client_index]) + 1
+    calculations[1][client_index].append((calculation_id, expression, result))
+
+    return calculation_id
 
 
 def _get_calc_result(expression):
@@ -132,17 +123,20 @@ def _pack_calculations(calculations):
 
     return payload
 
-def _pack_in_json(payload):
 
-    json_ = json.dumps(payload)
+class SingletonMeta(type):  # TODO: Ripped off. Need to understand what's going on...
 
-    return json_
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+
+        if cls not in cls._instances:
+            instance = super().__call__(*args, **kwargs)
+            cls._instances[cls] = instance
+        return cls._instances[cls]
 
 
-def _unpack_json(json_in):
+class Storage(metaclass=SingletonMeta):
 
-    json_ = json_in
-    dict = json.loads(json_)
-    expression = dict['expression']
-
-    return expression
+    def __init__(self):
+        self.calculations = [[], []]
