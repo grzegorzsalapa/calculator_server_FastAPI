@@ -25,10 +25,12 @@ def add_calculation(calc: Calculation, request: Request):
         result = _get_calc_result(expression)
 
         client_index = _find_client_or_create_new(client_ip, storage.calculations)
-        calculation_id = _add_calculation_to_clients_record_and_set_id(client_index,
-                                                                       expression,
-                                                                       result,
-                                                                       storage.calculations)
+        calculation_id = _add_calculation_to_clients_record_and_set_id(
+            client_index,
+            expression,
+            result,
+            storage.calculations
+        )
 
         return {"url": f'/calculations/{calculation_id}'}
 
