@@ -9,7 +9,7 @@ logging.basicConfig(
     encoding='utf-8',
     level=logging.DEBUG,
     format='%(asctime)s %(levelname)s: %(message)s',
-    datefmt='%m/%d/%Y %I:%M:%S %p'
+    datefmt='%d/%m/%Y %H:%M:%S'
 )
 
 
@@ -44,7 +44,7 @@ def add_calculation(calc: Calculation, request: Request):
 
         logging.info(f"Request from {client_ip} | Calculation added with id: {calculation_id}")
 
-        return {"url": f'/calculations/{calculation_id}'}
+        return {'url': f'/calculations/{calculation_id}'}
 
     except Exception as e:
         logging.error(f"Error while processing request from {client_ip} |", str(e))
@@ -161,7 +161,7 @@ def _pack_calculations(calculations):
     payload = []
     i = 1
     for tup in calculations:
-        payload.append({'id': f'{tup[0]}', 'expression': f'{tup[1]}', 'result': f'{tup[2]}'})
+        payload.append({"id": f'{tup[0]}', "expression": f"{tup[1]}", "result": f"{tup[2]}"})
         i += 1
 
     return payload
