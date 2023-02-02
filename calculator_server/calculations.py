@@ -1,6 +1,30 @@
 from fastapi import FastAPI, Request, HTTPException
 from .calculate import calculate, CalculationError
 from pydantic import BaseModel
+import logging
+import time
+
+
+logging.basicConfig(
+    filename='logs/server.log',
+    encoding='utf-8',
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)s: %(message)s',
+    datefmt='%d/%m/%Y %H:%M:%S'
+)
+
+
+def log_processing_time(f):
+    def timer(*args, **kwargs):
+        start_time = time.time()
+        result = f(*args, **kwargs)
+        duration = time.time() - start_time
+        logging.info(f"Request took {duration} to process.")
+        return result
+    return timer
+
+
+calculator = FastAPI()
 
 
 class Calculation(BaseModel):
@@ -9,9 +33,6 @@ class Calculation(BaseModel):
 
 class Calculations(BaseModel):
     id: str
-
-
-calculator = FastAPI()
 
 
 @calculator.post("/calculations", status_code=201)
@@ -32,9 +53,12 @@ def add_calculation(calc: Calculation, request: Request):
             storage.calculations
         )
 
-        return {"url": f'/calculations/{calculation_id}'}
+        logging.info(f"Request from {client_ip} | Calculation added with id: {calculation_id}")
+
+        return {'url': f'/calculations/{calculation_id}'}
 
     except Exception as e:
+        logging.error(f"Error while processing request from {client_ip} |", str(e))
         raise HTTPException(status_code=500,
                             detail=str(e),
                             headers={"X-Error": "Unexpected error."})
@@ -57,12 +81,16 @@ def get_all_calculations(request: Request):
 
         calculations = storage.calculations[1][client_index]
 
+        logging.info(f'Request from {client_ip} | {len(calculations)} record(s) returned.')
+
         return _pack_calculations(calculations)
 
     except HTTPException:
         raise
 
     except Exception as e:
+
+        logging.error(f"Error while processing request from {client_ip} |", str(e))
         raise HTTPException(status_code=500,
                             detail=str(e),
                             headers={"X-Error": "Unexpected error."})
@@ -81,6 +109,7 @@ def get_calculation_by_id(calc_id: int, request: Request):
 
         except ValueError:
 
+            logging.info(f"Request from {client_ip} | No records of this client were found.")
             raise HTTPException(status_code=404,
                                 detail="Record not found.",
                                 headers={"X-Error": "Record not found."})
@@ -90,6 +119,7 @@ def get_calculation_by_id(calc_id: int, request: Request):
 
         except IndexError:
 
+            logging.info(f'Request from {client_ip} | No record with id {calc_id} was found.')
             raise HTTPException(status_code=404,
                                 detail=f"Record with id: {calc_id} was not found.",
                                 headers={"X-Error": f"Record with id: {calc_id} was not found."})
@@ -100,11 +130,14 @@ def get_calculation_by_id(calc_id: int, request: Request):
         raise
 
     except Exception as e:
+
+        logging.error(f"Error while processing request from {client_ip} |", str(e))
         raise HTTPException(status_code=500,
                             detail=str(e),
                             headers={"X-Error": "Unexpected error."})
 
 
+@log_processing_time
 def _find_client_or_create_new(client_ip, calculations):
 
     try:
@@ -140,7 +173,7 @@ def _pack_calculations(calculations):
     payload = []
     i = 1
     for tup in calculations:
-        payload.append({'id': f'{tup[0]}', 'expression': f'{tup[1]}', 'result': f'{tup[2]}'})
+        payload.append({"id": f'{tup[0]}', "expression": f"{tup[1]}", "result": f"{tup[2]}"})
         i += 1
 
     return payload
@@ -162,3 +195,4 @@ class Storage(metaclass=SingletonMeta):
 
     def __init__(self):
         self.calculations = [[], []]
+        logging.info("Storage for calculations created.")
