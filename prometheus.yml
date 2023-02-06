@@ -8,11 +8,6 @@ scrape_configs:
     - targets: ["localhost:9090"]
 
   - job_name: "calculator"
+    scrape_interval: 15s
     static_configs:
     - targets: ["calculator_server:8080"]
-
-remote_write:
-  - url: https://prometheus-prod-22-prod-eu-west-3.grafana.net/api/prom/push
-    basic_auth:
-      username: 763180
-      password: eyJrIjoiZWMyMTg0ODU1ZTJhMTE3MjYxMGU3Mzc2YjFlMWE4MTM1MjE0NTExNCIsIm4iOiJwcm9tZXRoZXVzLWNhbGN1bGF0b3IiLCJpZCI6NzkwMzUyfQ==
