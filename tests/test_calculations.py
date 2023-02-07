@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from calculator_server.calculations import calculator, Storage
+from calculator_server.calculations import calculator
 
 
 client = TestClient(calculator)

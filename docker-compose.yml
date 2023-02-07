@@ -2,15 +2,29 @@ version: '3.8'
 
 volumes:
   prometheus_data: {}
+  mongodb_data: {}
 
 services:
   calculator_server:
     image: calculator_server:latest
     container_name: calculator_server
+    restart: unless-stopped
     expose:
-      - 8080
+      - "8080"
     ports:
-      - 8080:8080
+      - "8080:8080"
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    expose:
+      - "27017"
+    ports:
+      - "27017:27017"
+
 
   prometheus:
     image: prom/prometheus:latest
@@ -26,16 +40,16 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
     expose:
-      - 9090
+      - "9090"
     ports:
-      - 9090:9090
+      - "9090:9090"
 
   grafana:
     image: grafana/grafana-oss:latest-ubuntu
     container_name: grafana
     restart: unless-stopped
     ports:
-      - 3000:3000
+      - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
