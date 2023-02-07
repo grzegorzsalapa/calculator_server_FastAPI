@@ -27,7 +27,7 @@ def log_processing_time(f):
 
 
 def get_database():
-    CONNECTION_STRING = "mongodb://localhost:27017"
+    CONNECTION_STRING = "mongodb:27017"
     client = MongoClient(CONNECTION_STRING)
     return client['calculations']
 
