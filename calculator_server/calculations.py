@@ -4,7 +4,6 @@ from .calculate import calculate, CalculationError
 from .db_interface import DBInterface
 from pydantic import BaseModel
 import logging
-import time
 
 
 logging.basicConfig(
@@ -14,16 +13,6 @@ logging.basicConfig(
     format='%(asctime)s %(levelname)s: %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S'
 )
-
-
-def log_processing_time(f):
-    def timer(*args, **kwargs):
-        start_time = time.time()
-        result = f(*args, **kwargs)
-        duration = time.time() - start_time
-        logging.info(f"Request took {duration} to process.")
-        return result
-    return timer
 
 
 class Calculation(BaseModel):
