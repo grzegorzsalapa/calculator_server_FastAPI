@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
+from starlette_prometheus import metrics, PrometheusMiddleware
 from .calculate import calculate, CalculationError
 from pydantic import BaseModel
 import logging
@@ -25,6 +26,8 @@ def log_processing_time(f):
 
 
 calculator = FastAPI()
+calculator.add_middleware(PrometheusMiddleware)
+calculator.add_route("/metrics", metrics)
 
 
 class Calculation(BaseModel):
