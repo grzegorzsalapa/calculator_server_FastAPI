@@ -39,22 +39,25 @@ def test_expression_from_valid_json_is_added_to_calculations_record_and_result_u
         assertion(action_result)
 
 
-def test_returns_all_calculations_of_given_client():
+def test_returns_all_calculations():
 
     def arrangement():
         return _set_up_mocked_DB(
             list_with_all=[
                 {
+                    "_id": "BlaBla",
                     "id": "1",
                     "expression": "2+2",
                     "result": "4"
                 },
                 {
+                    "_id": "BlaBla",
                     "id": "2",
                     "expression": "2/0",
                     "result": "Invalid expression (division by zero)."
                 },
                 {
+                    "_id": "BlaBla",
                     "id": "3",
                     "expression": "(26-8) / 9",
                     "result": "2.0"
@@ -78,12 +81,13 @@ def test_returns_all_calculations_of_given_client():
         assertion(action_result)
 
 
-def test_returns_calculation_of_given_client_by_id():
+def test_returns_calculation_by_id():
 
     def arrangement():
         return _set_up_mocked_DB(
             list_with_given_id=[
                 {
+                    "_id": "BlaBla",
                     "id": "8",
                     "expression": "2/0",
                     "result": "Invalid expression (division by zero)."
@@ -97,7 +101,7 @@ def test_returns_calculation_of_given_client_by_id():
 
     def assertion(response):
         assert response.status_code == 302
-        assert response.json() == [{"id": "2", "expression": "2/0", "result": "Invalid expression (division by zero)."}]
+        assert response.json() == [{"id": "8", "expression": "2/0", "result": "Invalid expression (division by zero)."}]
 
     db_interface_mock = arrangement()
     with patch('calculator_server.calculations.db_interface', new=db_interface_mock):
@@ -108,7 +112,7 @@ def test_returns_calculation_of_given_client_by_id():
 def test_responds_with_404_when_no_records():
 
     def arrangement():
-        return _set_up_mocked_DB(list_with_all=[{}])
+        return _set_up_mocked_DB(list_with_all=[])
 
     def action():
         response = client.get("/calculations")
@@ -127,7 +131,7 @@ def test_responds_with_404_when_no_records():
 def test_responds_with_404_when_no_record_with_requested_id():
 
     def arrangement():
-        return _set_up_mocked_DB(list_with_given_id=[{}])
+        return _set_up_mocked_DB(list_with_given_id=[])
 
     def action():
         response = client.get("/calculations/5")
@@ -135,7 +139,7 @@ def test_responds_with_404_when_no_record_with_requested_id():
 
     def assertion(response):
         assert response.status_code == 404
-        assert response.json() == {'detail': 'Record not found.'}
+        assert response.json() == {'detail': 'Record with id: 5 was not found.'}
 
     db_interface_mock = arrangement()
     with patch('calculator_server.calculations.db_interface', new=db_interface_mock):
