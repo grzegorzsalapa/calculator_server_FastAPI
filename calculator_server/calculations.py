@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, HTTPException
 from starlette_prometheus import metrics, PrometheusMiddleware
 from .calculate import calculate, CalculationError
 from pydantic import BaseModel
+from pymongo import MongoClient
 import logging
 import time
 
@@ -25,9 +26,16 @@ def log_processing_time(f):
     return timer
 
 
+def get_database():
+    CONNECTION_STRING = "mongodb:27017"
+    client = MongoClient(CONNECTION_STRING)
+    return client['calculations']
+
+
 calculator = FastAPI()
 calculator.add_middleware(PrometheusMiddleware)
 calculator.add_route("/metrics", metrics)
+dbcalc = get_database()
 
 
 class Calculation(BaseModel):
@@ -42,18 +50,15 @@ class Calculations(BaseModel):
 def add_calculation(calc: Calculation, request: Request):
 
     try:
-        storage = Storage()
         client_ip = request.client.host
         expression = calc.expression
 
         result = _get_calc_result(expression)
 
-        client_index = _find_client_or_create_new(client_ip, storage.calculations)
         calculation_id = _add_calculation_to_clients_record_and_set_id(
-            client_index,
+            client_ip,
             expression,
             result,
-            storage.calculations
         )
 
         logging.info(f"Request from {client_ip} | Calculation added with id: {calculation_id}")
@@ -71,22 +76,17 @@ def add_calculation(calc: Calculation, request: Request):
 def get_all_calculations(request: Request):
 
     try:
-        storage = Storage()
         client_ip = request.client.host
-        try:
-            client_index = storage.calculations[0].index(client_ip)
-
-        except ValueError:
-
+        calculations = dbcalc[client_ip]
+        calc_list = list(calculations.find())
+        if not calc_list:
             raise HTTPException(status_code=404,
                                 detail="No records were found.",
                                 headers={"X-Error": "No records were found."})
 
-        calculations = storage.calculations[1][client_index]
+        logging.info(f'Request from {client_ip} | {len(calc_list)} record(s) returned.')
 
-        logging.info(f'Request from {client_ip} | {len(calculations)} record(s) returned.')
-
-        return _pack_calculations(calculations)
+        return _pack_calculations(calc_list)
 
     except HTTPException:
         raise
@@ -103,31 +103,16 @@ def get_all_calculations(request: Request):
 def get_calculation_by_id(calc_id: int, request: Request):
 
     try:
-        storage = Storage()
         client_ip = request.client.host
-        calculation_id = calc_id - 1
-
-        try:
-            client_index = storage.calculations[0].index(client_ip)
-
-        except ValueError:
-
-            logging.info(f"Request from {client_ip} | No records of this client were found.")
-            raise HTTPException(status_code=404,
-                                detail="Record not found.",
-                                headers={"X-Error": "Record not found."})
-
-        try:
-            calculations = [storage.calculations[1][client_index][calculation_id]]
-
-        except IndexError:
-
-            logging.info(f'Request from {client_ip} | No record with id {calc_id} was found.')
+        calculations = dbcalc[client_ip]
+        calc_list = list(calculations.find({"id": f"{calc_id}"}))
+        if not calc_list:
+            logging.info(f'Request from {client_ip} | Record with id {calc_id} was not found.')
             raise HTTPException(status_code=404,
                                 detail=f"Record with id: {calc_id} was not found.",
                                 headers={"X-Error": f"Record with id: {calc_id} was not found."})
 
-        return _pack_calculations(calculations)
+        return _pack_calculations(calc_list)
 
     except HTTPException:
         raise
@@ -140,23 +125,16 @@ def get_calculation_by_id(calc_id: int, request: Request):
                             headers={"X-Error": "Unexpected error."})
 
 
-@log_processing_time
-def _find_client_or_create_new(client_ip, calculations):
+def _add_calculation_to_clients_record_and_set_id(client_ip, expression, result):
 
-    try:
-        client_index = calculations[0].index(client_ip)
-    except ValueError:
-        client_index = len(calculations[0])
-        calculations[0].append(client_ip)
-        calculations[1].append([])
-
-    return client_index
-
-
-def _add_calculation_to_clients_record_and_set_id(client_index, expression, result, calculations):
-
-    calculation_id = len(calculations[1][client_index]) + 1
-    calculations[1][client_index].append((calculation_id, expression, result))
+    calculations = dbcalc[client_ip]
+    calculation_id = calculations.count_documents({}) + 1
+    calculation = {
+        "id": f'{calculation_id}',
+        "expression": f"{expression}",
+        "result": f"{result}"
+    }
+    calculations.insert_one(calculation)
 
     return calculation_id
 
@@ -173,29 +151,8 @@ def _get_calc_result(expression):
 
 def _pack_calculations(calculations):
 
-    payload = []
-    i = 1
-    for tup in calculations:
-        payload.append({"id": f'{tup[0]}', "expression": f"{tup[1]}", "result": f"{tup[2]}"})
-        i += 1
+    for item in calculations:
+        del item["_id"]
+    payload = calculations
 
     return payload
-
-
-class SingletonMeta(type):  # TODO: Ripped off. Need to understand what's going on...
-
-    _instances = {}
-
-    def __call__(cls, *args, **kwargs):
-
-        if cls not in cls._instances:
-            instance = super().__call__(*args, **kwargs)
-            cls._instances[cls] = instance
-        return cls._instances[cls]
-
-
-class Storage(metaclass=SingletonMeta):
-
-    def __init__(self):
-        self.calculations = [[], []]
-        logging.info("Storage for calculations created.")
