@@ -1,10 +1,9 @@
 from fastapi import FastAPI, Request, HTTPException
 from starlette_prometheus import metrics, PrometheusMiddleware
 from .calculate import calculate, CalculationError
+from .db_interface import DBInterface
 from pydantic import BaseModel
-from pymongo import MongoClient
 import logging
-import time
 
 
 logging.basicConfig(
@@ -16,34 +15,18 @@ logging.basicConfig(
 )
 
 
-def log_processing_time(f):
-    def timer(*args, **kwargs):
-        start_time = time.time()
-        result = f(*args, **kwargs)
-        duration = time.time() - start_time
-        logging.info(f"Request took {duration} to process.")
-        return result
-    return timer
-
-
-def get_database():
-    CONNECTION_STRING = "mongodb:27017"
-    client = MongoClient(CONNECTION_STRING)
-    return client['calculations']
-
-
-calculator = FastAPI()
-calculator.add_middleware(PrometheusMiddleware)
-calculator.add_route("/metrics", metrics)
-dbcalc = get_database()
-
-
 class Calculation(BaseModel):
     expression: str
 
 
 class Calculations(BaseModel):
     id: str
+
+
+calculator = FastAPI()
+calculator.add_middleware(PrometheusMiddleware)
+calculator.add_route("/metrics", metrics)
+db_interface = DBInterface("127.0.0.1:27017")
 
 
 @calculator.post("/calculations", status_code=201)
@@ -55,7 +38,7 @@ def add_calculation(calc: Calculation, request: Request):
 
         result = _get_calc_result(expression)
 
-        calculation_id = _add_calculation_to_clients_record_and_set_id(
+        calculation_id = db_interface.add_calculation_to_clients_record_and_set_id(
             client_ip,
             expression,
             result,
@@ -77,8 +60,7 @@ def get_all_calculations(request: Request):
 
     try:
         client_ip = request.client.host
-        calculations = dbcalc[client_ip]
-        calc_list = list(calculations.find())
+        calc_list = db_interface.get_all_calculations(client_ip)
         if not calc_list:
             raise HTTPException(status_code=404,
                                 detail="No records were found.",
@@ -104,8 +86,7 @@ def get_calculation_by_id(calc_id: int, request: Request):
 
     try:
         client_ip = request.client.host
-        calculations = dbcalc[client_ip]
-        calc_list = list(calculations.find({"id": f"{calc_id}"}))
+        calc_list = db_interface.get_calculation_by_id(client_ip, calc_id)
         if not calc_list:
             logging.info(f'Request from {client_ip} | Record with id {calc_id} was not found.')
             raise HTTPException(status_code=404,
@@ -123,20 +104,6 @@ def get_calculation_by_id(calc_id: int, request: Request):
         raise HTTPException(status_code=500,
                             detail=str(e),
                             headers={"X-Error": "Unexpected error."})
-
-
-def _add_calculation_to_clients_record_and_set_id(client_ip, expression, result):
-
-    calculations = dbcalc[client_ip]
-    calculation_id = calculations.count_documents({}) + 1
-    calculation = {
-        "id": f'{calculation_id}',
-        "expression": f"{expression}",
-        "result": f"{result}"
-    }
-    calculations.insert_one(calculation)
-
-    return calculation_id
 
 
 def _get_calc_result(expression):
