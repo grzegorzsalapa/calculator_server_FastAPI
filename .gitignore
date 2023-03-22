@@ -3,6 +3,4 @@
 .idea
 __pycache__
 dist
-pyproject.toml
-LICENSE
 logs

@@ -26,7 +26,7 @@ class Calculations(BaseModel):
 calculator = FastAPI()
 calculator.add_middleware(PrometheusMiddleware)
 calculator.add_route("/metrics", metrics)
-db_interface = DBInterface("127.0.0.1:27017")
+db_interface = DBInterface("mongodb:27017")
 
 
 @calculator.post("/calculations", status_code=201)

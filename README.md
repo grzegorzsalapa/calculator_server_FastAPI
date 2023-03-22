@@ -1,22 +1,26 @@
-# Calculator server
+# Calculator server (FastAPI)
 
-Calculator is a REST API server based on FastAPI. It can calculate simple, well-formed mathematical expressions.
+Simple server based on FastAPI framework, calculating well-formed math equations. Intended to use with "
+calculator_client_http".
+Server stores expressions and results in MongoDB. Service is monitored with use of Prometheus and Grafana. All elements
+of this service are set up in separate docker containers.
 
-Calculator stores expressions and results in MongoDB database, from which they can be retrieved by id. Calculator
-server is monitored with use of Prometheus from which data is sent to Grafana.
+## How to run
 
-There is a simple client application (calculator_client_http) to access Calculator server.
+#### Running containers with docker compose
 
-### Example of use
+    $  docker compose up -d
 
-##### calculator
+## How to test
 
-    >>> result = calculator('(2 + 2) * 2')
+#### Installation
 
-#### pycalculator_CLI
+    $ pip install .[test]
 
-    $ cli
+#### Run tests
 
-### Requirements
+    $ pytest
 
-All packages required to run calculator module are specified in requirements.txt file.
+## Requirements
+
+All packages required to run calculator module are specified in pyproject.toml file.
